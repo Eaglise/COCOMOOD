@@ -34,6 +34,30 @@ class KNNRecommender:
         # X - матрица M x N, N - количество признаков
         return np.dot(s/np.linalg.norm(s), X)
 
+class TopPredictedScoreRecommender:
+    def __init__(self):
+        self.X = None
+        self.w = []
+
+    def fit(self, X):
+        self.X = X
+        return self
+
+    def train(self, X, s):
+        self.w = self.find_weights_from_correlation(X, s)
+        self.s = s
+        return self
+
+    def eval(self, k):
+        predicted_scores = self.X @ self.w
+        # print(predicted_scores + np.mean(self.s))
+        idxs = np.argsort(-predicted_scores)[:k]
+        return [(idx, predicted_scores[idx] +  + np.mean(self.s)) for idx in idxs]
+    
+    @staticmethod
+    def find_weights_from_correlation(X, s):
+        return [np.correlate(X[:,i] - np.mean(X[:,i]), s - np.mean(s))[0] for i in range(X.shape[1])]
+
     
 # Пример
 if __name__ == "__main__":
@@ -45,5 +69,7 @@ if __name__ == "__main__":
     ])
     y = np.array([1, 1, 0])
     res = KNNRecommender().fit(X).eval(y, 2)
-    print(res)
-    print(KNNRecommender.find_centroid_of_interest_from_scores(X, np.array([6,7,5,10])))
+    # print(res)
+    # print(KNNRecommender.find_centroid_of_interest_from_scores(X, np.array([6,7,5,10])))
+    # print(TopPredictedScoreRecommender.find_weights_from_correlation(X, np.array([6,7,5,10])))
+    print(TopPredictedScoreRecommender().fit(X).train(X[:2,], np.array([6,7])).eval(4))
