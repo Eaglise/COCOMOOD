@@ -2,11 +2,14 @@ from asyncio import Task
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+import hashlib
 
 import typing
 import asyncio
 
-from app.system.dataclasses import TGDC
+from AI.ai_module.recs_knn import KNNRecommender
+from app.system.dataclasses import TGDC, ReadTimeListDC
+from AI.ai_module import LinearRegressor,AutoregressionModel
 
 from .dataclasses import DialogueState
 from app.store.bot.api.dataclasses import (
@@ -78,7 +81,7 @@ class Updater:
                 await self.handle_start_read(message)
             case self.Commands.READ.value:
                 await self.handle_read(
-                    message.message.chat.id, message.message.message_thread_id
+                    message
                 )
             case _:
                 await self.handle_wrong_command(message)
@@ -130,10 +133,11 @@ class Updater:
             )
             ob = await self.app.store.accessor.add_readtime(chat.userid)
             sessions = await self.app.store.accessor.get_last_30_readtime(chat.userid)
+            print(sessions)
             if sessions:
                 if len(sessions.data) >2:
                     asyncio.create_task(
-                    self.handle_notification(
+                    self.handle_notification(chat=chat,message=message,sessions=sessions
                     )
                 )
 
@@ -145,9 +149,19 @@ class Updater:
             )
         
     async def handle_notification(
-        self,
+        self,chat: TGDC,message: MessageUpdate, sessions:ReadTimeListDC
     ):
-        pass
+        l_start = [session.start for session in sessions.data]
+        res = AutoregressionModel().fit(l_start).predict_next_value()
+        delta = (res - datetime.now()).total_seconds()
+        #delta = 15
+        await asyncio.sleep(delta)
+        await self.handle_to_queue(
+                chat_id=chat.chatid,
+                message_thread_id=message.message.message_thread_id,
+                text="Вам стоит почитать",
+            )
+        
 
     async def handle_read(
         self,
@@ -272,10 +286,12 @@ class Updater:
         text = message.message.text
         mangas = text.split('|')
         readtime = await self.app.store.accessor.get_last_readtime(chat.userid)
+        manga_list = []
         for i in range(len(mangas)):
             current = mangas[i].split('--')
             manga = await self.app.store.accessor.seacrh_manga_name(current[0])
             if manga:
+                manga_list.append(manga)
                 await self.app.store.accessor.add_readtimemanga(read_id=readtime.id,manga_id=manga.id,rating=int(current[1]))
             else:
                 await self.handle_to_queue(
@@ -284,7 +300,38 @@ class Updater:
                         text=f'''Ненаход  {current[0]}''',
                     )
             
-        #машинка
+        read_list = await self.app.store.accessor.get_all_read_info_by_user_id(chat.userid)
+        massive_shit = []
+        for read_instance in read_list.data:
+            for manga_instance in read_instance.read:
+                massive_shit.append((manga_instance,read_instance))
+        print("______")
+        print(massive_shit)
+        print(manga_list)
+        print("______")
+        manga_dict = {}
+        for manga_book in manga_list:
+            for shit in massive_shit:
+                if shit[0].manga_id == manga_book.id:
+                    if manga_dict.get(manga_book.id):
+                        manga_dict[manga_book.id].append((shit[1].readtime.end,shit[0].rating))
+                    else:
+                        manga_dict[manga_book.id]=[(shit[1].readtime.end,shit[0].rating)]
+        import numpy as np
+        for manga_id, arr in manga_dict.items():    
+            X = np.array(
+                [[int(t[0].timestamp())] for t in arr]
+            )
+            y = np.array([t[1] for t in arr])
+            res = LinearRegressor().fit(X, y).predict(np.array([int(datetime.now().timestamp())]))
+            await self.handle_to_queue(
+                        chat_id=chat.chatid,
+                        message_thread_id=message.message.message_thread_id,
+                        text=f'''Ваша заинтересованность для манги {manga_id} в скором времени будет - {res}''',
+                    )
+
+
+            
         await self.app.store.accessor.edit_chat_state(chatid=chat.chatid,state="AUTH")
 
 
@@ -300,6 +347,23 @@ class Updater:
                         message_thread_id=message.message.message_thread_id,
                         text=f'''Ненаход  {current[0]}''',
                     )
+        all_manga = await self.app.store.accessor.get_all_mangainfo()
+        manga_rating = await self.app.store.accessor.get_user_scores(chat.userid)
+
+        import numpy as np
+        manga_massive = np.array([[manga_i.id,abs(hash(manga_i.title))% (10 ** 4),manga_i.type.id,manga_i.status.id,len(manga_i.genre),manga_i.score] for manga_i in all_manga])
+        X = manga_massive
+        model = KNNRecommender().fit(X)
+        target = model.find_centroid_of_interest_from_scores(np.array([[manga_i.id,abs(hash(manga_i.title))% (10 ** 4),manga_i.type.id,manga_i.status.id,len(manga_i.genre),manga_i.score] for manga_i in all_manga if manga_i.id in [mr.manga.id for mr in manga_rating.data]]), np.array([sfdc.rating for sfdc in manga_rating.data]))
+        res = model.eval(target, k=4)
+        titles = [(all_manga[idx].title,all_manga[idx].id) for idx, rasst in res]
+        for i in range(4):
+            await self.handle_to_queue(
+                        chat_id=chat.chatid,
+                        message_thread_id=message.message.message_thread_id,
+                        text=f'''Рекомендуем вам прочитать {titles[i][0]}, для поиска по базе id = {titles[i][1]}''',
+                    )
+
         await self.app.store.accessor.edit_chat_state(chatid=chat.chatid,state="AUTH")
             
     async def handle_to_queue(

@@ -22,6 +22,7 @@ class LinearRegressor:
         return self
     
     def predict(self, x):
+        print(self.w)
         return np.append(x, 1) @ self.w
     
     @staticmethod

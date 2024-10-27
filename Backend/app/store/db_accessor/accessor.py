@@ -338,7 +338,7 @@ class DBAccessor(BaseAccessor):
     ) -> ScoreDC | None:
         try:
             async with self.app.database.session() as session:
-                score = ScoreModel(manga_id=manga_id, user_id=user_id, score=score)
+                score = ScoreModel(manga_id=manga_id, user_id=user_id, rating=score)
                 session.add(score)
                 await session.commit()
                 return score.to_DC()
@@ -351,7 +351,6 @@ class DBAccessor(BaseAccessor):
         try:
             async with self.app.database.session() as session:
                 rt = ReadTimeModel(user_id=user_id, start=datetime.now())
-                print(datetime)
                 session.add(rt)
                 await session.commit()
                 return rt.to_DC()
@@ -458,26 +457,23 @@ class DBAccessor(BaseAccessor):
                 )
                 res = await session.scalars(query)
                 readtime = res.all()
+
                 if readtime:
-                    return ReadTimeListDC(
-                        data=[
+                    rl = [
                             ReadTimeDC(
                                 id=readtime_instance.id,
                                 user_id=readtime_instance.user_id,
                                 start=readtime_instance.start,
                                 end=readtime_instance.end,
                             )
-                            for readtime_instance in readtime[-1:0:-1]
-                        ].append(
-                            ReadTimeDC(
-                                id=readtime[0].id,
-                                user_id=readtime[0].user_id,
-                                start=readtime[0].start,
-                                end=readtime[0].end,
-                            )
-                        )
+                            for readtime_instance in readtime
+                        ]
+                    rl=rl[::-1]
+                    return ReadTimeListDC(
+                        data=rl
                     )
-                return None
+                else:
+                    return None
         except sqlalchemy.exc.IntegrityError:
             return None
         except sqlalchemy.exc.ProgrammingError:
@@ -605,13 +601,12 @@ class DBAccessor(BaseAccessor):
                     select(MangaModel)
                     .where(MangaModel.id == manga_id)
                     .options(
-                        selectinload(MangaModel.mangatype)
-                        .selectinload(MangaModel.mangastatus)
-                        .selectinload(MangaModel.mangatheme)
-                        .selectinload(MangaModel.mangata)
-                        .selectinload(MangaModel.mangaauthor)
-                        .selectinload(MangaModel.mangagenre)
-                    )
+                        selectinload(MangaModel.mangatype)).options(
+                        selectinload(MangaModel.mangastatus)).options(
+                        selectinload(MangaModel.mangatheme)).options(
+                        selectinload(MangaModel.mangata)).options(
+                        selectinload(MangaModel.mangaauthor)).options(
+                        selectinload(MangaModel.mangagenre))
                 )
                 res = await session.scalars(query)
                 manga = res.one_or_none()
@@ -702,14 +697,14 @@ class DBAccessor(BaseAccessor):
                 query = (
                     select(MangaModel)
                     .options(
-                        selectinload(MangaModel.mangatype)
-                        .selectinload(MangaModel.mangastatus)
-                        .selectinload(MangaModel.mangatheme)
-                        .selectinload(MangaModel.mangata)
-                        .selectinload(MangaModel.mangaauthor)
-                        .selectinload(MangaModel.mangagenre)
+                        selectinload(MangaModel.mangatype)).options(
+                        selectinload(MangaModel.mangastatus)).options(
+                        selectinload(MangaModel.mangatheme)).options(
+                        selectinload(MangaModel.mangata)).options(
+                        selectinload(MangaModel.mangaauthor)).options(
+                        selectinload(MangaModel.mangagenre))
                     )
-                )
+                
                 res = await session.scalars(query)
                 mangas = res.all()
                 if mangas:

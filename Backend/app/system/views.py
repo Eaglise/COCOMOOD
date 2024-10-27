@@ -79,7 +79,7 @@ class ReadDaysView(AuthRequiredMixin, CorsViewMixin, View):
         )
 
 
-class MangaView(AuthRequiredMixin, CorsViewMixin, View):
+class MangaView( CorsViewMixin, View):
     async def get(self):
         try:
             manga_id = int(self.request.query.get("manga_id"))
@@ -92,18 +92,22 @@ class MangaView(AuthRequiredMixin, CorsViewMixin, View):
             raise HTTPNotFound(resaon="Не существует указанной манги")
         if manga.theme:
             themes = await self.store.accessor.get_themes([theme.theme_id for theme in manga.theme])
+            themes = themes.data
         else:
             themes= []
         if manga.ta:
             tas = await self.store.accessor.get_tas([ta.ta_id for ta in manga.ta])
+            tas = tas.data
         else:
             tas= []
         if manga.author:
             authors = await self.store.accessor.get_authors([author.author_id for author in manga.author])
+            authors = authors.data
         else:
             authors= []
         if manga.genre:
             genres = await self.store.accessor.get_genres([genre.genre_id for genre in manga.genre])
+            genres = genres.data
         else:
             genres= []
         return json_response(
