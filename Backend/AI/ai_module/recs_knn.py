@@ -28,6 +28,13 @@ class KNNRecommender:
     def __cosine_distance(x, y):
         return np.dot(x,y)/np.linalg.norm(x)/np.linalg.norm(y)
     
+    @staticmethod
+    def find_centroid_of_interest_from_scores(X, s):
+        # s - вектор длины M, M - количество оценных тайтлов
+        # X - матрица M x N, N - количество признаков
+        return np.dot(s/np.linalg.norm(s), X)
+
+    
 # Пример
 if __name__ == "__main__":
     X = np.array([
@@ -39,3 +46,4 @@ if __name__ == "__main__":
     y = np.array([1, 1, 0])
     res = KNNRecommender().fit(X).eval(y, 2)
     print(res)
+    print(KNNRecommender.find_centroid_of_interest_from_scores(X, np.array([6,7,5,10])))
