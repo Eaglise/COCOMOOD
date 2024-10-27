@@ -35,7 +35,7 @@ class LinearRegressor:
                 X_batch = X[i - batch_size: i]
                 y_batch = y[i - batch_size: i]
                 e = np.dot(X_batch, w.T) - y_batch
-                grad = 2 * np.dot(e, X_batch)
+                grad = 2 * np.dot(e, X_batch) / batch_size
                 # print(f"Error: {np.linalg.norm(e)}")
                 w -= learning_rate * grad
                 cur_epoch += 1
